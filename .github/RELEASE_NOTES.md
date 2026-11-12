@@ -1,11 +1,11 @@
-# Release v0.2.0 — session, tray, notifications, presence
+﻿# Huskcord — native shell for Discord
 
 Native shell for Discord's web app. One Rust binary + a WebView2 window instead
 of Electron's main process, GPU process, two utilities and a crash handler.
 
 ## Downloads
 
-`huskcord-windows-x64.zip` → unzip → run `huskcord.exe`.
+`huskcord-windows-x64.zip` â†’ unzip â†’ run `huskcord.exe`.
 Requires the WebView2 runtime (present on Windows 10/11 by default).
 
 ## What is new
@@ -27,7 +27,7 @@ Windows 11, Discord 1.0.9267 (Electron 42.7.1), WebView2 157.0.4341.46.
 |---|---|---|
 | Discord desktop | 1,064.9 MB | 756.5 MB |
 | Huskcord | ~600 MB | ~400 MB |
-| delta | **−455 MB (−42%)** | **−355 MB (−47%)** |
+| delta | **âˆ’455 MB (âˆ’42%)** | **âˆ’355 MB (âˆ’47%)** |
 
 ## Known limitations
 
@@ -53,3 +53,4 @@ huskcord --no-tray            no tray icon
 huskcord --no-presence        no Rich Presence
 huskcord --no-shortcuts       skip first-run Start menu / desktop shortcuts
 ```
+
