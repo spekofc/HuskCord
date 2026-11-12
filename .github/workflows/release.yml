@@ -1,4 +1,4 @@
-name: release
+﻿name: release
 
 on:
   push:
@@ -65,28 +65,4 @@ jobs:
         with:
           files: huskcord-windows-x64.zip
           generate_release_notes: true
-          body: |
-            ## Huskcord ${{ github.ref_name }}
-
-            Native shell for Discord's web app. Windows x64.
-
-            **Requires the WebView2 runtime** (present on Windows 10/11 by default).
-
-            ### Run
-            ```
-            huskcord-windows-x64.zip  ->  huskcord.exe
-            ```
-
-            ```
-            huskcord                      %APPDATA%\Huskcord
-            huskcord --profile work       separate session
-            huskcord --portable           ./data next to the exe
-            huskcord --data-dir <path>    explicit
-            ```
-
-            ### What is new in 0.2.0
-            - Persistent session across restarts
-            - System tray icon with show / mute / quit
-            - OS notifications instead of browser notifications
-            - Rich Presence over Discord's local IPC pipe
-            - Branded exe and window icon
+          body_path: .github/RELEASE_NOTES.md

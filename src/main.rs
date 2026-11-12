@@ -28,6 +28,7 @@ mod icon;
 mod notify;
 mod rich_presence;
 mod session;
+mod shortcuts;
 mod tray;
 
 use std::path::PathBuf;
@@ -136,6 +137,7 @@ fn set_badge(_count: u64) {
 struct AppState {
     url: String,
     profile: Option<session::Profile>,
+    args: Vec<String>,
     enable_tray: bool,
     enable_presence: bool,
     window: Option<Window>,
@@ -150,6 +152,7 @@ impl AppState {
         Self {
             url,
             profile: Some(profile),
+            args: args.to_vec(),
             enable_tray: !args.iter().any(|a| a == "--no-tray"),
             enable_presence: !args.iter().any(|a| a == "--no-presence"),
             window: None,
@@ -204,6 +207,18 @@ impl ApplicationHandler for AppState {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
             eprintln!("profile dir {} not creatable: {e}", data_dir.display());
         }
+
+        // ---- first-run integration ---------------------------------------
+        // Start menu entry + desktop shortcut, once per profile. A failure here
+        // is cosmetic, never fatal.
+        if shortcuts::should_run(&data_dir, &self.args) {
+            let portable = self.profile.as_ref().map(|p| p.portable).unwrap_or(false);
+            match shortcuts::install(&data_dir, portable) {
+                Ok(()) => eprintln!("shortcuts installed (start menu + desktop)"),
+                Err(e) => eprintln!("shortcuts skipped: {e}"),
+            }
+        }
+
         eprintln!(
             "profile: {}  ({})",
             self.profile.as_ref().map(|p| p.name.as_str()).unwrap_or("default"),

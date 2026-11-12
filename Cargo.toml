@@ -1,6 +1,6 @@
-[package]
+﻿[package]
 name = "huskcord"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/spekofc/HuskCord"
@@ -28,3 +28,4 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
