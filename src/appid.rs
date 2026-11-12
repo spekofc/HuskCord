@@ -3,22 +3,29 @@
 // Windows task grouping: AppUserModelID.
 //
 // Task Manager and the taskbar group processes by AppUserModelID, not by
-// executable. Without an explicit ID, every process gets a path-derived one and
-// each msedgewebview2.exe shows up as its own entry next to huskcord.exe.
+// executable. Without one, every process gets a path-derived ID and each
+// msedgewebview2.exe shows as its own entry next to huskcord.exe.
 //
-// Four things have to line up for one "Huskcord" tab with expandable children:
+// Findings from Windows 11 26100 (probe: .github/workflows/probe-aumid.yml,
+// reading kernel32!GetApplicationUserModelId back from a clean GitHub runner and
+// from this machine - identical result):
 //
-//   1. SetCurrentProcessExplicitAppUserModelID on the shell process.
-//   2. --app-user-model-id on WebView2's browser process, which Chromium then
-//      propagates to the renderer and utility processes it spawns.
-//   3. A registered AppUserModelId key whose DisplayName matches the executable
-//      description, so Task Manager has a name to show instead of a path.
-//   4. An explicit DisplayName on the window title, because Task Manager prefers
-//      the window title over the process description when both exist.
+//   * SetCurrentProcessExplicitAppUserModelID returns S_OK but the ID does not
+//     bind to the calling process on its own. The read-back is 0x00003D57
+//     (APPMODEL_ERROR_NO_APPLICATION) both before and after.
+//   * --app-user-model-id does reach WebView2's browser process command line,
+//     verified by string match, but the same read-back applies there.
 //
-// Verified on this machine: GetApplicationUserModelId (kernel32, XP-era HRESULT
-// 0x00003D57 = APPMODEL_ERROR_NO_APPLICATION) returns empty for a process that
-// never called the setter, so the setter is the only path that makes the ID real.
+// What that means for grouping:
+//   * Taskbar grouping (two windows -> one button) works from SetCurrentProcess..
+//     because the shell honours it for windows created after the call.
+//   * Task Manager's per-process list keys on the AppUserModelId registry entry
+//     plus the process image, so the registry key is what gives the group a
+//     name and icon. That is done below.
+//   * The expandable "tab" subtree in Task Manager groups processes that share a
+//     job object. WebView2 puts its tree in its own job, and inheriting our ID
+//     does not merge those jobs. Collapsing them would mean breaking WebView2's
+//     crash-isolation model, so this code does not attempt it.
 
 use std::process::Command;
 
@@ -26,8 +33,6 @@ use std::process::Command;
 pub const APP_ID: &str = "spekofc.Huskcord.Desktop";
 
 /// Claim the identity for this process. Must run before any window is created.
-/// Returns false if the shell rejected it, which is not fatal: the window still
-/// works, only grouping degrades.
 #[cfg(windows)]
 pub fn claim(app_id: &str) -> bool {
     use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
@@ -41,14 +46,12 @@ pub fn claim(_app_id: &str) -> bool {
     false
 }
 
-/// Register the AppUserModelId key so Task Manager can name the group.
+/// Register the AppUserModelId key so Task Manager can name and icon the group.
 ///
 /// HKCU\Software\Classes\AppUserModelId\<APP_ID>
-///   DisplayName    = "Huskcord"
-///   IconUri        = <exe path>
-///   IconBackgroundColor = "" (use the icon's own alpha)
-///
-/// Idempotent: rewrites only if the value differs.
+///   DisplayName         = "Huskcord"
+///   IconUri             = <exe path>
+///   IconBackgroundColor = "" (keep the icon's own alpha)
 #[cfg(windows)]
 pub fn register(app_id: &str, display_name: &str, exe: &std::path::Path) -> bool {
     use std::os::windows::process::CommandExt;
@@ -79,22 +82,20 @@ pub fn register(_app_id: &str, _display_name: &str, _exe: &std::path::Path) -> b
     false
 }
 
-/// Switch that makes WebView2's browser process adopt our identity. Chromium
-/// propagates the AUMID to the renderer and utility processes it spawns, so the
-/// whole tree groups with the shell.
+/// Switch that puts our identity on WebView2's browser process.
 pub fn webview_identity_switches() -> Vec<String> {
     vec![format!("--app-user-model-id={APP_ID}")]
 }
 
 /// Spawn helper: never open a console window for the child.
 #[cfg(windows)]
-pub fn detach(cmd: &mut Command) -> &mut Command {
+pub fn detach(cmd: &mut std::process::Command) -> &mut std::process::Command {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     cmd.creation_flags(CREATE_NO_WINDOW)
 }
 
 #[cfg(not(windows))]
-pub fn detach(cmd: &mut Command) -> &mut Command {
+pub fn detach(cmd: &mut std::process::Command) -> &mut std::process::Command {
     cmd
 }

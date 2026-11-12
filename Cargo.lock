@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "huskcord"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "image",
  "serde_json",
