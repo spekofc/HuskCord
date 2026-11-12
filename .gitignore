@@ -1,0 +1,15 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.orig
+
+# build output
+target/
+*.pdb
+
+# bench output
+bench/runs/
+*.log
+
+# local env
+.env

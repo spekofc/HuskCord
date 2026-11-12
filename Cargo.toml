@@ -1,0 +1,21 @@
+[package]
+name = "huskcord"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/spekofc/HuskCord"
+description = "Native shell for Discord's web app - winit + WebView2 instead of Electron"
+
+[dependencies]
+# winit, not tao: tao's event loop does not complete webview2-com's controller
+# callback, so the renderer never spawns. See docs/tao-vs-winit.md.
+winit = "0.30"
+wry = { version = "0.53", features = ["protocol"] }
+
+[profile.release]
+# a window host, not a math kernel: size over speed
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
