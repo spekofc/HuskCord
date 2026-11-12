@@ -6,8 +6,8 @@
 1 ICON "assets/huskcord.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,2,1,0
-PRODUCTVERSION 0,2,1,0
+FILEVERSION 0,2,2,0
+PRODUCTVERSION 0,2,2,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -20,12 +20,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "spekofc\0"
             VALUE "FileDescription", "Huskcord - native shell for Discord\0"
-            VALUE "FileVersion", "0.2.1\0"
+            VALUE "FileVersion", "0.2.2\0"
             VALUE "InternalName", "huskcord\0"
             VALUE "LegalCopyright", "MIT License, 2026 spekofc\0"
             VALUE "OriginalFilename", "huskcord.exe\0"
             VALUE "ProductName", "Huskcord\0"
-            VALUE "ProductVersion", "0.2.1\0"
+            VALUE "ProductVersion", "0.2.2\0"
         END
     END
     BLOCK "VarFileInfo"
@@ -33,4 +33,5 @@ BEGIN
         VALUE "Translation", 0x409, 1200
     END
 END
+
 

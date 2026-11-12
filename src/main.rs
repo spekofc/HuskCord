@@ -1,6 +1,6 @@
 // language: Rust, file: src/main.rs, target: Windows 11 x64, MSVC
 //
-// Huskcord — a native shell for Discord's web app.
+// Huskcord Ã¢â‚¬â€ a native shell for Discord's web app.
 //
 // Replaces Electron's process stack (main, GPU, network and audio utilities,
 // crashpad) with one ~20 MB binary and a WebView2 window. Discord's UI is
@@ -134,10 +134,68 @@ fn set_badge(_count: u64) {
     // reports the number, and wiring the icon is a self-contained follow-up.
 }
 
+/// Tear down in dependency order, then leave.
+///
+/// The "Not Responding" window on close was a teardown-order bug: the event
+/// loop exited while the WebView2 controller and the tray thread were still
+/// live, and window destruction ran while the renderer was mid-shutdown. Close
+/// the webview first (it owns the child HWND and the controller COM object),
+/// then the tray, then the process.
+///
+/// WebView2's browser process also outlived us by several seconds because its
+/// job object was released but the browser was still tearing down. Job objects
+/// here are per-shell, so we delete the browser's process tree explicitly once
+/// our own controller is gone. Only processes whose command line carries this
+/// process's data directory are touched.
+fn shutdown(webview: &mut Option<wry::WebView>, tray: &mut Option<tray::Tray>, data_dir: &str) {
+    // Drop the WebView while its parent window still exists.
+    *webview = None;
+    // Tray::drop wakes its pump and waits at most 600 ms; never blocks exit.
+    *tray = None;
+    // The window itself is owned by AppState and destroyed when the event loop
+    // returns. Give the renderer a beat to release its child window first.
+    std::thread::sleep(std::time::Duration::from_millis(120));
+    kill_webview_children(data_dir);
+    std::process::exit(0);
+}
+
+/// Ask every msedgewebview2.exe whose command line mentions `data_dir` to close,
+/// then force the survivors. Bounded: at most 1500 ms total.
+fn kill_webview_children(data_dir: &str) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    // The marker is the EBWebView subdirectory name, which WebView2 puts on its
+    // own command line (-user-data-dir=<profile>\EBWebView).
+    let marker = data_dir.replace('\'', "''");
+    let script = format!(
+        "$m='{marker}'; \
+         $p = Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -EA SilentlyContinue | \
+              Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains($m) }}; \
+         foreach ($x in $p) {{ try {{ $x.Terminate() | Out-Null }} catch {{}} }}",
+        marker = marker
+    );
+
+    let _ = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+}
+
 struct AppState {
     url: String,
     profile: Option<session::Profile>,
     args: Vec<String>,
+    /// Resolved WebView2 data dir, kept so teardown can identify our own
+    /// msedgewebview2 processes by command line.
+    data_dir: String,
     enable_tray: bool,
     enable_presence: bool,
     window: Option<Window>,
@@ -153,6 +211,7 @@ impl AppState {
             url,
             profile: Some(profile),
             args: args.to_vec(),
+            data_dir: String::new(),
             enable_tray: !args.iter().any(|a| a == "--no-tray"),
             enable_presence: !args.iter().any(|a| a == "--no-presence"),
             window: None,
@@ -207,6 +266,7 @@ impl ApplicationHandler for AppState {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
             eprintln!("profile dir {} not creatable: {e}", data_dir.display());
         }
+        self.data_dir = data_dir.to_string_lossy().into_owned();
 
         // ---- first-run integration ---------------------------------------
         // Start menu entry + desktop shortcut, once per profile. A failure here
@@ -287,7 +347,7 @@ impl ApplicationHandler for AppState {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => shutdown(&mut self.webview, &mut self.tray, &self.data_dir),
             WindowEvent::Resized(size) => {
                 if let Some(wv) = &self.webview {
                     let _ = wv.set_bounds(wry::Rect {
@@ -301,19 +361,27 @@ impl ApplicationHandler for AppState {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // tray events arrive on another thread; drain them here
+        // tray events arrive on another thread; drain them here.
+        // Collect first: handling a Quit needs &mut self, which the tray borrow
+        // would otherwise forbid.
+        let mut events = Vec::new();
         if let Some(tray) = &self.tray {
             while let Some(ev) = tray.poll() {
-                match ev {
-                    tray::TrayEvent::Quit => event_loop.exit(),
-                    tray::TrayEvent::Show | tray::TrayEvent::Activate => {
-                        if let Some(w) = &self.window {
-                            w.set_visible(true);
-                            w.focus_window();
-                        }
-                    }
-                    tray::TrayEvent::ToggleMute => { /* media key path is separate */ }
+                events.push(ev);
+            }
+        }
+        for ev in events {
+            match ev {
+                tray::TrayEvent::Quit => {
+                    shutdown(&mut self.webview, &mut self.tray, &self.data_dir);
                 }
+                tray::TrayEvent::Show | tray::TrayEvent::Activate => {
+                    if let Some(w) = &self.window {
+                        w.set_visible(true);
+                        w.focus_window();
+                    }
+                }
+                tray::TrayEvent::ToggleMute => { /* media key path is separate */ }
             }
         }
 
@@ -339,3 +407,5 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+

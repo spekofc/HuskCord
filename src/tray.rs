@@ -22,8 +22,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
     DispatchMessageW, GetCursorPos, GetMessageW, LoadIconW, RegisterClassW, SetForegroundWindow,
     TrackPopupMenu, TranslateMessage, CreateIconIndirect, DestroyIcon, HICON, ICONINFO, MSG,
-    TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON, WNDCLASSW, WM_COMMAND, WM_DESTROY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WM_USER,
+    PostMessageW, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON, WNDCLASSW, WM_COMMAND, WM_DESTROY,
+    WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_USER,
 };
 
 const WM_TRAYICON: u32 = WM_USER + 1;
@@ -31,6 +31,20 @@ const ID_TRAY: u32 = 1;
 const CMD_SHOW: usize = 1001;
 const CMD_QUIT: usize = 1002;
 const CMD_MUTE: usize = 1003;
+
+// Set once the thread has created its window, so shutdown can post to it.
+static mut TRAY_HWND: HWND = std::ptr::null_mut();
+
+/// Post a harmless message to the tray window so its GetMessageW returns and the
+/// loop can see the shutdown request.
+fn wake_thread() {
+    let hwnd = unsafe { std::ptr::addr_of!(TRAY_HWND).read() };
+    if !hwnd.is_null() {
+        unsafe {
+            PostMessageW(hwnd, WM_NULL, 0, 0);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum TrayEvent {
@@ -91,6 +105,7 @@ impl Tray {
                 eprintln!("tray: CreateWindowExW failed");
                 return;
             }
+            TRAY_HWND = hwnd;
 
             // stash the sender so the wndproc can push events
             BOXED.sender = Some(ev_tx);
@@ -163,11 +178,27 @@ impl Tray {
 
 impl Drop for Tray {
     fn drop(&mut self) {
+        // Request shutdown, then wake the thread's GetMessageW with a posted
+        // message so it can observe the request. Joining unconditionally was the
+        // "Not Responding" hang: the thread sits in GetMessageW with no pending
+        // message and only checks sd_rx between messages, so join() blocked the
+        // winit thread forever while the window was already being torn down.
         let _ = self.shutdown.send(());
-        // the thread's GetMessage blocks, so give it a nudge via a real message
-        // in production this would post WM_NULL; here we rely on process exit.
+        wake_thread();
+
         if let Some(h) = self.thread.take() {
-            let _ = h.join();
+            // Bounded wait: if the tray thread does not exit (Explorer hung, a
+            // modal menu is open) the app must still close. The thread holds
+            // only Win32 handles and exits with the process.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
+            while std::time::Instant::now() < deadline {
+                if h.is_finished() {
+                    let _ = h.join();
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
+            // Leave it detached; process exit reclaims it.
         }
     }
 }
@@ -327,3 +358,4 @@ unsafe fn load_ico(hinstance: HINSTANCE) -> Option<HICON> {
 unsafe fn build_icon(_rgba: Option<Vec<u8>>) -> Option<HICON> {
     None
 }
+

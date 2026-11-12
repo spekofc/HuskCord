@@ -29,6 +29,13 @@ Windows 11, Discord 1.0.9267 (Electron 42.7.1), WebView2 157.0.4341.46.
 | Huskcord | ~600 MB | ~400 MB |
 | delta | **âˆ’455 MB (âˆ’42%)** | **âˆ’355 MB (âˆ’47%)** |
 
+## Fixed in 0.2.2
+
+| | |
+|---|---|
+| **No icon in the shell or Start menu** | `build.rs` fed a MinGW COFF object to MSVC's linker, which rejected it silently, so the exe shipped with no resource directory at all. It now uses the SDK's `rc.exe` to produce a `.res` the linker consumes. The wolf is in the exe, the Start menu and the tray. |
+| **"Not Responding" on close** | The tray thread sat in `GetMessageW` while `join()` blocked the winit thread. Teardown now posts a wake message and waits a bounded 600 ms, closes the WebView before the window, and terminates its own WebView2 process tree so nothing is left behind. Close takes ~700 ms. |
+
 ## Known limitations
 
 - **The notification shim is only as good as Discord's usage.** Discord's web
@@ -53,4 +60,5 @@ huskcord --no-tray            no tray icon
 huskcord --no-presence        no Rich Presence
 huskcord --no-shortcuts       skip first-run Start menu / desktop shortcuts
 ```
+
 
