@@ -1,0 +1,49 @@
+name: probe-aumid
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      - name: Measure AppUserModelID behaviour
+        shell: pwsh
+        run: |
+          # Start the shell, then read back both AUMIDs with the real API.
+          $exe = (Resolve-Path ".\target\release\huskcord.exe").Path
+          $dir = Join-Path (Get-Location) "probe-profile"
+          $p = Start-Process -FilePath $exe -ArgumentList '--data-dir', $dir, '--no-tray', '--no-shortcuts' -PassThru
+          Start-Sleep -Seconds 12
+
+          Add-Type -TypeDefinition @"
+          using System; using System.Runtime.InteropServices;
+          public class AU {
+              [DllImport("kernel32.dll", SetLastError=true)]
+              public static extern IntPtr OpenProcess(int access, bool inherit, int pid);
+              [DllImport("kernel32.dll", SetLastError=true)]
+              public static extern bool CloseHandle(IntPtr h);
+              [DllImport("kernel32.dll", CharSet=CharSet.Unicode)]
+              public static extern int GetApplicationUserModelId(IntPtr h, ref uint len, [Out] char[] appId);
+          }
+          "@
+
+          function Get-Aumid($pid) {
+              $h = [AU]::OpenProcess(0x1000, $false, $pid)
+              if ($h -eq [IntPtr]::Zero) { return "open failed" }
+              $len = 280
+              $buf = New-Object char[] 280
+              $hr = [AU]::GetApplicationUserModelId($h, [ref]$len, $buf)
+              [void][AU]::CloseHandle($h)
+              return ("hr=0x{0:X8} id='{1}'" -f $hr, (($buf -join '').Trim([char]0)))
+          }
+
+          Write-Host "shell ($($p.Id)): $(Get-Aumid $p.Id)"
+          $b = Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" |
+               Where-Object { $_.CommandLine -and $_.CommandLine.Contains($dir) -and $_.CommandLine -notmatch '--type=' } |
+               Select-Object -First 1
+          if ($b) { Write-Host "browser ($($b.ProcessId)): $(Get-Aumid $b.ProcessId)" }
+          else { Write-Host "browser: not found" }
+
+          Get-Process -Id $p.Id -ErrorAction SilentlyContinue | Stop-Process -Force

@@ -1,6 +1,6 @@
 // language: Rust, file: src/main.rs, target: Windows 11 x64, MSVC
 //
-// Huskcord — a native shell for Discord's web app.
+// Huskcord â€” a native shell for Discord's web app.
 //
 // Replaces Electron's process stack (main, GPU, network and audio utilities,
 // crashpad) with one ~900 KB binary and a WebView2 window. Discord's UI is
@@ -19,6 +19,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod appid;
 mod icon;
 mod notify;
 mod rich_presence;
@@ -92,12 +93,19 @@ const BROWSER_SWITCHES: [&str; 15] = [
 ];
 
 fn browser_args(extra: &[String]) -> String {
-    let mut args = String::with_capacity(1200);
+    let mut args = String::with_capacity(1400);
     args.push_str("--disable-features=");
     args.push_str(DISABLED_FEATURES);
     for s in BROWSER_SWITCHES {
         args.push(' ');
         args.push_str(s);
+    }
+    // WebView2's browser process adopts our AppUserModelID so the whole tree
+    // groups under "Huskcord" in Task Manager instead of splintering into
+    // anonymous msedgewebview2.exe entries.
+    for s in appid::webview_identity_switches() {
+        args.push(' ');
+        args.push_str(&s);
     }
     for s in extra {
         args.push(' ');
@@ -199,6 +207,18 @@ impl ApplicationHandler for AppState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
+        }
+
+        // Taskbar / Task Manager grouping identity. Must be claimed before any
+        // window exists, so the shell attributes this process correctly from
+        // its first window onward.
+        if !appid::claim(appid::APP_ID) {
+            eprintln!("could not claim AppUserModelID; task grouping may splinter");
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if !appid::register(appid::APP_ID, "Huskcord", &exe) {
+                eprintln!("could not register AppUserModelId in HKCU; the group may show a path");
+            }
         }
 
         let mut attrs = Window::default_attributes()
@@ -382,3 +402,4 @@ fn main() {
         std::process::exit(1);
     }
 }
+
