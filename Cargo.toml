@@ -1,6 +1,6 @@
 [package]
 name = "huskcord"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/spekofc/HuskCord"
@@ -11,6 +11,15 @@ description = "Native shell for Discord's web app - winit + WebView2 instead of 
 # callback, so the renderer never spawns. See docs/tao-vs-winit.md.
 winit = "0.30"
 wry = { version = "0.53", features = ["protocol"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde_json = "1"
 
 [profile.release]
 # a window host, not a math kernel: size over speed

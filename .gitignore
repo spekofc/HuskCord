@@ -1,15 +1,19 @@
-# Rust
+﻿# Rust
 /target/
 **/*.rs.bk
-Cargo.lock.orig
 
 # build output
-target/
 *.pdb
 
 # bench output
 bench/runs/
 *.log
 
-# local env
-.env
+# local test profiles
+test-profile/
+ci-profile/
+data/
+
+# editor
+.vscode/
+.idea/
