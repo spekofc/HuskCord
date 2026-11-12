@@ -29,8 +29,8 @@ jobs:
           }
           "@
 
-          function Get-Aumid($pid) {
-              $h = [AU]::OpenProcess(0x1000, $false, $pid)
+          function Get-Aumid([int]$procId) {
+              $h = [AU]::OpenProcess(0x1000, $false, $procId)
               if ($h -eq [IntPtr]::Zero) { return "open failed" }
               $len = 280
               $buf = New-Object char[] 280
