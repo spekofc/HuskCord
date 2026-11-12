@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="assets/logo-256.png" width="160" alt="Huskcord">
 </p>
 
@@ -19,7 +19,7 @@
 
 Discord's desktop client is an Electron app: a bundled Chromium, a bundled Node
 main process, a GPU process, two utility processes and a crash handler. Huskcord
-keeps the part that matters — the Chromium renderer running Discord's real UI —
+keeps the part that matters â€” the Chromium renderer running Discord's real UI â€”
 and replaces everything around it with one native window.
 
 Nothing about Discord's UI is reimplemented. The app is fetched from
@@ -34,7 +34,7 @@ machine, same login, both settled after ~30 s.
 |---|---|---|
 | Discord desktop | 1,064.9 MB | 756.5 MB |
 | **Huskcord** | **~600 MB** | **~400 MB** |
-| delta | **−455 MB (−42%)** | **−355 MB (−47%)** |
+| delta | **âˆ’455 MB (âˆ’42%)** | **âˆ’355 MB (âˆ’47%)** |
 
 Per-process at settle:
 
@@ -43,14 +43,14 @@ Per-process at settle:
 main / shell      176 MB          21 MB
 renderer          509 MB         247 MB
 gpu-process       190 MB         110 MB
-browser              —           125 MB
+browser              â€”           125 MB
 network utility    65 MB          50 MB
 audio utility      95 MB          22 MB
-storage utility      —            20 MB
+storage utility      â€”            20 MB
 crashpad           35 MB          18 MB
 ```
 
-> Numbers move ±100 MB with page load and with Discord's own update cadence.
+> Numbers move Â±100 MB with page load and with Discord's own update cadence.
 > `bench/prowl.ps1` produces them; run it yourself rather than trusting a table.
 
 ## Install
@@ -58,7 +58,7 @@ crashpad           35 MB          18 MB
 Grab `huskcord-windows-x64.zip` from [Releases](https://github.com/spekofc/HuskCord/releases),
 unzip, run `huskcord.exe`.
 
-Requires the **WebView2 runtime** — present on Windows 10/11 by default.
+Requires the **WebView2 runtime** â€” present on Windows 10/11 by default.
 
 ## Build
 
@@ -85,16 +85,16 @@ Discord application id used for Rich Presence.
 
 ## Features
 
-- **Persistent session** — cookies, localStorage and the service worker cache
+- **Persistent session** â€” cookies, localStorage and the service worker cache
   live in a WebView2 profile that survives restarts. Profiles keep separate
   logins.
-- **System tray** — show, toggle mute, quit. The tray owns its own message-only
+- **System tray** â€” show, toggle mute, quit. The tray owns its own message-only
   window and pump so it cannot stall the renderer.
-- **OS notifications** — a script injected before page load replaces
+- **OS notifications** â€” a script injected before page load replaces
   `window.Notification`, so Discord's toasts become real Windows toasts.
-- **Rich Presence** — speaks Discord's local IPC protocol
+- **Rich Presence** â€” speaks Discord's local IPC protocol
   (`\\.\pipe\discord-ipc-N`) directly.
-- **Branded icon** — embedded in the exe, the window, and the tray.
+- **Branded icon** â€” embedded in the exe, the window, and the tray.
 
 ## Why winit and not tao
 
@@ -108,9 +108,9 @@ list that made things *worse*, in [docs/tao-vs-winit.md](docs/tao-vs-winit.md).
 
 ## What this is not
 
-Not a Discord client rewrite. There is no local Discord UI to rewrite — the app
+Not a Discord client rewrite. There is no local Discord UI to rewrite â€” the app
 arrives over the network. Huskcord gives that app a native shell without
-Electron's tax. A true native client (custom UI, custom protocol, ~40–80 MB
+Electron's tax. A true native client (custom UI, custom protocol, ~40â€“80 MB
 steady) is a different project that trades every server-delivered feature.
 
 ## Contributing
@@ -121,4 +121,5 @@ through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT â€” see [LICENSE](LICENSE).
+

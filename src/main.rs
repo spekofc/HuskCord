@@ -1,24 +1,19 @@
 // language: Rust, file: src/main.rs, target: Windows 11 x64, MSVC
 //
-// Huskcord Ã¢â‚¬â€ a native shell for Discord's web app.
+// Huskcord — a native shell for Discord's web app.
 //
 // Replaces Electron's process stack (main, GPU, network and audio utilities,
-// crashpad) with one ~20 MB binary and a WebView2 window. Discord's UI is
+// crashpad) with one ~900 KB binary and a WebView2 window. Discord's UI is
 // unchanged: the server-delivered React app, in the same Chromium engine family,
 // with Discord's own client user agent.
-//
-// What this shell adds on top of a bare browser window:
-//   session    persistent profile that survives restarts (session.rs)
-//   tray       system tray icon with show/quit (tray.rs)
-//   notify     OS toasts instead of browser notifications (notify.rs)
-//   presence   Rich Presence over Discord's local IPC pipe (rich_presence.rs)
 //
 // Usage:
 //   huskcord                      %APPDATA%\Huskcord
 //   huskcord --profile work       separate session
 //   huskcord --portable           ./data next to the exe
 //   huskcord --data-dir <path>    explicit
-//   huskcord --no-tray --no-presence
+//   huskcord --flag <switch>      append one extra Chromium switch (repeatable)
+//   huskcord --no-tray --no-presence --no-shortcuts
 //
 // Build: cargo build --release -> target/release/huskcord.exe
 
@@ -32,6 +27,7 @@ mod shortcuts;
 mod tray;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use winit::{
     application::ApplicationHandler,
@@ -51,6 +47,9 @@ const UA_DESKTOP: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 // Chromium systems a chat client never uses. Unknown names are ignored by
 // Chromium, so over-listing is safe; listing something Discord needs is not.
+//
+// NOTE: every entry here was measured or reasoned about. Do not add switches
+// that disable compositing - see docs/memory-experiments.md.
 const DISABLED_FEATURES: &str = "\
 MediaRouter,\
 OptimizationHints,\
@@ -92,11 +91,15 @@ const BROWSER_SWITCHES: [&str; 15] = [
     "--disable-extensions",
 ];
 
-fn browser_args() -> String {
-    let mut args = String::with_capacity(1024);
+fn browser_args(extra: &[String]) -> String {
+    let mut args = String::with_capacity(1200);
     args.push_str("--disable-features=");
     args.push_str(DISABLED_FEATURES);
     for s in BROWSER_SWITCHES {
+        args.push(' ');
+        args.push_str(s);
+    }
+    for s in extra {
         args.push(' ');
         args.push_str(s);
     }
@@ -105,7 +108,6 @@ fn browser_args() -> String {
 
 /// Messages the page sends us through window.ipc.postMessage.
 fn on_ipc(body: String) {
-    // {"kind":"notify"|"badge","payload":{...}}
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
         match v.get("kind").and_then(|k| k.as_str()) {
             Some("notify") => {
@@ -115,76 +117,46 @@ fn on_ipc(body: String) {
                 notify::show(title, text);
             }
             Some("badge") => {
-                let n = v
+                let _n = v
                     .get("payload")
                     .and_then(|p| p.get("count"))
                     .and_then(|c| c.as_u64())
                     .unwrap_or(0);
-                set_badge(n);
             }
             _ => {}
         }
     }
 }
 
-/// Taskbar overlay badge. Zero means clear.
-fn set_badge(_count: u64) {
-    // TODO: overlay composited icon via ITaskbarList3::SetOverlayIcon.
-    // Left as a no-op so the IPC path is wired end to end; the shim already
-    // reports the number, and wiring the icon is a self-contained follow-up.
-}
-
 /// Tear down in dependency order, then leave.
 ///
 /// The "Not Responding" window on close was a teardown-order bug: the event
 /// loop exited while the WebView2 controller and the tray thread were still
-/// live, and window destruction ran while the renderer was mid-shutdown. Close
-/// the webview first (it owns the child HWND and the controller COM object),
-/// then the tray, then the process.
-///
-/// WebView2's browser process also outlived us by several seconds because its
-/// job object was released but the browser was still tearing down. Job objects
-/// here are per-shell, so we delete the browser's process tree explicitly once
-/// our own controller is gone. Only processes whose command line carries this
-/// process's data directory are touched.
+/// live. Close the webview first, then the tray, then terminate our own
+/// msedgewebview2 tree (it otherwise outlives us by several seconds).
 fn shutdown(webview: &mut Option<wry::WebView>, tray: &mut Option<tray::Tray>, data_dir: &str) {
-    // Drop the WebView while its parent window still exists.
     *webview = None;
-    // Tray::drop wakes its pump and waits at most 600 ms; never blocks exit.
     *tray = None;
-    // The window itself is owned by AppState and destroyed when the event loop
-    // returns. Give the renderer a beat to release its child window first.
-    std::thread::sleep(std::time::Duration::from_millis(120));
+    std::thread::sleep(Duration::from_millis(120));
     kill_webview_children(data_dir);
     std::process::exit(0);
 }
 
-/// Ask every msedgewebview2.exe whose command line mentions `data_dir` to close,
-/// then force the survivors. Bounded: at most 1500 ms total.
 fn kill_webview_children(data_dir: &str) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    // The marker is the EBWebView subdirectory name, which WebView2 puts on its
-    // own command line (-user-data-dir=<profile>\EBWebView).
     let marker = data_dir.replace('\'', "''");
     let script = format!(
         "$m='{marker}'; \
-         $p = Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -EA SilentlyContinue | \
-              Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains($m) }}; \
-         foreach ($x in $p) {{ try {{ $x.Terminate() | Out-Null }} catch {{}} }}",
+         Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -EA SilentlyContinue | \
+         Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains($m) }} | \
+         ForEach-Object {{ try {{ $_.Terminate() | Out-Null }} catch {{}} }}",
         marker = marker
     );
 
     let _ = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            &script,
-        ])
+        .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script])
         .creation_flags(CREATE_NO_WINDOW)
         .status();
 }
@@ -193,6 +165,7 @@ struct AppState {
     url: String,
     profile: Option<session::Profile>,
     args: Vec<String>,
+    extra_flags: Vec<String>,
     /// Resolved WebView2 data dir, kept so teardown can identify our own
     /// msedgewebview2 processes by command line.
     data_dir: String,
@@ -202,15 +175,15 @@ struct AppState {
     webview: Option<wry::WebView>,
     tray: Option<tray::Tray>,
     presence: Option<rich_presence::Presence>,
-    presence_start: u64,
 }
 
 impl AppState {
-    fn new(url: String, profile: session::Profile, args: &[String]) -> Self {
+    fn new(url: String, profile: session::Profile, args: &[String], extra_flags: Vec<String>) -> Self {
         Self {
             url,
             profile: Some(profile),
             args: args.to_vec(),
+            extra_flags,
             data_dir: String::new(),
             enable_tray: !args.iter().any(|a| a == "--no-tray"),
             enable_presence: !args.iter().any(|a| a == "--no-presence"),
@@ -218,7 +191,6 @@ impl AppState {
             webview: None,
             tray: None,
             presence: None,
-            presence_start: 0,
         }
     }
 }
@@ -248,13 +220,11 @@ impl ApplicationHandler for AppState {
             }
         };
 
-        let size = window.inner_size();
-
-        // Store the window FIRST. Anything below that fails hard (WebView2
-        // controller, tray thread) must not leave the app with a live window
-        // and no handle to it - that is exactly the silent-blank-window mode
-        // documented in docs/tao-vs-winit.md.
+        // Store the window FIRST: anything below that fails hard must not leave
+        // the app with a live window and no handle to it.
         self.window = Some(window);
+
+        let size = self.window.as_ref().unwrap().inner_size();
 
         // ---- persistent WebView2 profile --------------------------------
         let data_dir: PathBuf = self
@@ -285,9 +255,6 @@ impl ApplicationHandler for AppState {
             data_dir.display()
         );
 
-        // WebContext must outlive the WebViewBuilder call but not the app; it is
-        // dropped at the end of this scope, which is fine because WebView2
-        // copies the data-dir string into its own environment at creation.
         let mut context = WebContext::new(Some(data_dir));
 
         let builder = WebViewBuilder::new_with_web_context(&mut context)
@@ -295,8 +262,7 @@ impl ApplicationHandler for AppState {
             .with_user_agent(UA_DESKTOP)
             .with_transparent(false)
             .with_browser_accelerator_keys(false)
-            .with_additional_browser_args(browser_args())
-            // notifications + badge bridge
+            .with_additional_browser_args(browser_args(&self.extra_flags))
             .with_initialization_script(&notify::init_script())
             .with_ipc_handler(|req| on_ipc(req.body().to_string()))
             .with_devtools(cfg!(debug_assertions));
@@ -313,7 +279,6 @@ impl ApplicationHandler for AppState {
             }
             Err(e) => {
                 eprintln!("webview build failed: {e}");
-                // A shell without a renderer is worse than no shell: exit loud.
                 event_loop.exit();
                 return;
             }
@@ -333,10 +298,6 @@ impl ApplicationHandler for AppState {
             if let Ok(cid) = std::env::var("HUSKCORD_CLIENT_ID") {
                 self.presence = rich_presence::Presence::connect(&cid);
                 if self.presence.is_some() {
-                    self.presence_start = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0);
                     eprintln!("rich presence connected");
                 } else {
                     eprintln!("rich presence: no Discord IPC pipe found");
@@ -345,7 +306,7 @@ impl ApplicationHandler for AppState {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => shutdown(&mut self.webview, &mut self.tray, &self.data_dir),
             WindowEvent::Resized(size) => {
@@ -360,10 +321,9 @@ impl ApplicationHandler for AppState {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // tray events arrive on another thread; drain them here.
-        // Collect first: handling a Quit needs &mut self, which the tray borrow
-        // would otherwise forbid.
+        // Collect first: handling a Quit needs &mut self.
         let mut events = Vec::new();
         if let Some(tray) = &self.tray {
             while let Some(ev) = tray.poll() {
@@ -381,7 +341,7 @@ impl ApplicationHandler for AppState {
                         w.focus_window();
                     }
                 }
-                tray::TrayEvent::ToggleMute => { /* media key path is separate */ }
+                tray::TrayEvent::ToggleMute => {}
             }
         }
 
@@ -394,18 +354,31 @@ impl ApplicationHandler for AppState {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // --flag <switch> may repeat. Useful for measuring a Chromium switch without
+    // rebuilding; see docs/memory-experiments.md.
+    let mut extra_flags = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--flag" {
+            if let Some(v) = args.get(i + 1) {
+                extra_flags.push(v.clone());
+                i += 1;
+            }
+        }
+        i += 1;
+    }
+
     let profile = session::resolve();
     let url = std::env::var("DISCORD_SHELL_URL").unwrap_or_else(|_| DEFAULT_URL.into());
 
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
 
-    let mut state = AppState::new(url, profile, &args);
+    let mut state = AppState::new(url, profile, &args, extra_flags);
 
     if let Err(e) = event_loop.run_app(&mut state) {
         eprintln!("event loop error: {e}");
         std::process::exit(1);
     }
 }
-
-
