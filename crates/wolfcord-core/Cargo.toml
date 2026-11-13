@@ -1,0 +1,15 @@
+[package]
+name = "wolfcord-core"
+description = "Discord protocol client: gateway events and REST, no UI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serenity = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

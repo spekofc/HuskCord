@@ -1,31 +1,26 @@
-﻿[package]
-name = "huskcord"
-version = "0.3.0"
+[workspace]
+resolver = "2"
+members = ["crates/wolfcord-core", "crates/wolfcord-app"]
+
+[workspace.package]
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/spekofc/HuskCord"
-description = "Native shell for Discord's web app - winit + WebView2 instead of Electron"
 
-[dependencies]
-# winit, not tao: tao's event loop does not complete webview2-com's controller
-# callback, so the renderer never spawns. See docs/tao-vs-winit.md.
-winit = "0.30"
-wry = { version = "0.53", features = ["protocol"] }
-windows-sys = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_System_LibraryLoader",
-] }
-image = { version = "0.25", default-features = false, features = ["png"] }
-serde_json = "1"
+[workspace.dependencies]
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.37"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.release]
-# a window host, not a math kernel: size over speed
-opt-level = "s"
-lto = true
+# Performance target: startup latency and steady-state RSS. Codegen is worth it
+# here because this binary replaces a 600 MB browser.
+opt-level = 3
+lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
-

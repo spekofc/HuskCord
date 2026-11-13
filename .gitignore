@@ -17,3 +17,7 @@ data/
 # editor
 .vscode/
 .idea/
+
+# Wolfcord runtime state
+run-profile/
+/data/

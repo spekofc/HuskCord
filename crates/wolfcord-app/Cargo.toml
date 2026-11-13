@@ -1,0 +1,19 @@
+[package]
+name = "wolfcord-app"
+description = "Wolfcord - a native Discord client. No Chromium."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "wolfcord"
+path = "src/main.rs"
+
+[dependencies]
+wolfcord-core = { path = "../wolfcord-core" }
+eframe = { workspace = true }
+egui = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
