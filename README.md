@@ -47,7 +47,7 @@ voice, screenshare, and embeds for now.
 
 ---
 
-# Huskcord ? the shell
+# Huskcord - the shell
 
 Discord's desktop client is an Electron app: a bundled Chromium, a bundled Node
 main process, a GPU process, two utility processes and a crash handler. Huskcord
@@ -146,7 +146,7 @@ list that made things *worse*, in [docs/tao-vs-winit.md](docs/tao-vs-winit.md).
 
 ---
 
-# Wolfcord ? the native client
+# Wolfcord - the native client
 
 No Chromium. No WebView2. One process, **97 MB**, drawing its own UI with egui.
 
@@ -257,4 +257,4 @@ through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
 
-MIT ? see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
