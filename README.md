@@ -49,6 +49,8 @@ audio utility      95 MB          22 MB
 storage utility      â€”            20 MB
 crashpad           35 MB          18 MB
 ```
+<img width="655" height="247" alt="image" src="https://github.com/user-attachments/assets/485cadac-29fd-45bf-8429-2abb8ca85c70" />
+
 
 > Numbers move Â±100 MB with page load and with Discord's own update cadence.
 > `bench/prowl.ps1` produces them; run it yourself rather than trusting a table.
