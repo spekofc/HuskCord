@@ -1,0 +1,65 @@
+name: wolfcord-release
+
+# Builds the native client, not the shell. Separate artifact and separate tag
+# namespace (wolfcord-v*) so the two products do not collide in Releases.
+on:
+  push:
+    tags: ["wolfcord-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: project-b
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Separate cache key: this branch builds a different workspace.
+          key: wolfcord
+          workspaces: ". -> target"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          # Debug info off: the `ring` crate fails with cl.exe D8050 otherwise.
+          $env:CARGO_PROFILE_RELEASE_DEBUG = "0"
+          cargo build --release -p wolfcord-app --locked
+          if (-not (Test-Path ".\target\release\wolfcord.exe")) { throw "binary missing" }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          # No token, so it opens the offline view. Verify it stays up and exits clean.
+          $exe = (Resolve-Path ".\target\release\wolfcord.exe").Path
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) { throw "wolfcord exited early: $($p.ExitCode)" }
+          $ws = [math]::Round((Get-Process -Id $p.Id).WorkingSet64/1MB, 1)
+          Write-Host "shell up, working set $ws MB"
+          Stop-Process -Id $p.Id -Force
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target\release\wolfcord.exe dist\
+          Copy-Item LICENSE dist\
+          Copy-Item crates\wolfcord-app\README.md dist\README.md
+          Compress-Archive -Path dist\* -DestinationPath wolfcord-windows-x64.zip
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/wolfcord-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wolfcord-windows-x64.zip
+          body_path: crates/wolfcord-app/RELEASE_NOTES.md
