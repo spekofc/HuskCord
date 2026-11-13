@@ -65,7 +65,7 @@ machine, same login, both settled after ~30 s.
 | | Working Set | Private Commit |
 |---|---|---|
 | Discord desktop | 1,064.9 MB | 756.5 MB |
-| **Huskcord** | **~600 MB** | **~400 MB** |
+| **Huskcord** | **~400-600 MB** | **~400 MB** |
 | delta | **?455 MB (?42%)** | **?355 MB (?47%)** |
 
 Per-process at settle:
