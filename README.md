@@ -25,7 +25,7 @@
 |---|---|---|
 | What it is | Discord's real UI inside a native window | Its own UI, speaking the protocol |
 | Engine | WebView2 (the Chromium already on Windows) | none |
-| **RAM** | **601 MB** | **97 MB** |
+| **RAM** | **~400-601 MB** | **97 MB** |
 | Processes | 8 | **1** |
 | Binary | 0.9 MB | 11.9 MB |
 | Parity | everything Discord ships | text chat so far |
