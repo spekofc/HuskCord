@@ -125,3 +125,24 @@ through [SECURITY.md](SECURITY.md), never a public issue.
 
 MIT â€” see [LICENSE](LICENSE).
 
+
+---
+
+## Two products in this repo
+
+main is Huskcord: Discord's own UI inside a WebView2 window. Full feature
+parity, 601 MB, eight processes.
+
+[project-b](https://github.com/spekofc/HuskCord/tree/project-b) is **Wolfcord**:
+a native client that draws its own UI with egui. 97 MB, one process, no Chromium.
+
+| | RAM | Processes | Parity |
+|---|---|---|---|
+| Discord desktop | 1,064.9 MB | 8 | — |
+| Huskcord (WebView2) | 600.9 MB | 8 | full |
+| [Wolfcord](https://github.com/spekofc/HuskCord/releases/tag/wolfcord-v0.1.0) | **97.0 MB** | **1** | text only so far |
+
+Same measurements, same machine. Neither is a rewrite of the other: the shell runs
+Discord's app, the native client replaces it.
+
+Releases are namespaced: * builds the shell, wolfcord-v* builds the client.
